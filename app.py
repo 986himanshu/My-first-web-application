@@ -83,5 +83,8 @@ def view_the_log() -> 'html':
 def entry_page() -> 'html':
     return render_template('entry.html',
                            the_title='Welcome to search4letters on the web!')
-app.run(debug = True)
+app.run(debug = True, host= "0.0.0.0", port = 5000)
+# In the context of servers, 0.0.0.0 means "all IPv4 addresses on the local machine".
+# If a host has two IP addresses, 192.168.1.1 and 10.1.2.1, and a server running on the host listens on 0.0.0.0,
+# it will be reachable at both of those IPs.
 
