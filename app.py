@@ -6,79 +6,72 @@ app = Flask(__name__)
 def hello() -> str:
     return 'Hello world from Flask!'
 
+import psycopg2 as psql
+
+
+class SQLDatabase:  # This class will be context manager with start and exit defined. It will implement Setup, Do, Teardown pattern
+    def __init__(self, config: dict) -> None:  # For connection to PostgreSQL
+        self.configuration = config
+
+    def __enter__(self) -> 'cursor':  # Do part: Creating cursor object that will constitute DB API
+        self.conn = psql.connect(**self.configuration)
+        self.cursor = self.conn.cursor()
+        return self.cursor
+
+    def __exit__(self, exc_type, exc_value,
+                 exc_trace) -> None:  # Teardown part: It will close connection and release resources safely
+        self.conn.commit()
+        self.cursor.close()
+        self.conn.close()
+
+app.config['dbconfig'] = {'host' : 'localhost',
+                'dbname' : 'vsearchlogdb',
+                'user' : 'postgres',
+                'password' : '9811562757',
+                'port' : '5432'
+    }
+
 def log_request(req: 'flask_request', res: str) -> None:
-    with open('vsearch.log', 'a') as log:
-        print(req.form, req.remote_addr, req.user_agent, res, file=log, sep='|')
+    with SQLDatabase(app.config['dbconfig']) as cursor:
+        _SQL = """insert into log 
+        (phrase, letters, ip, browser_string, results)
+        values
+        (%s, %s, %s, %s, %s)"""
+        cursor.execute(_SQL, (req.form['phrase'],
+                              req.form['letters'],
+                              req.remote_addr,
+                              req.user_agent.browser,
+                              # This attribute is returning null entry while request.user_agent string does have browser name
+                              res,))
 
 @app.route('/search4' ,methods=['POST'])
-@app.route('/search4' ,methods=['POST'])
 def do_search() -> str:
+    """Extract the posted data; perform the search; return results."""
     phrase = request.form['phrase']
     letters = request.form['letters']
     title = 'Here are your results:'
     results = str(search4letters(phrase, letters))
-    log_request(request, results) #Added logs to keep track of request made or served
+    log_request(request, results)
     return render_template('results.html',
                            the_title=title,
                            the_phrase=phrase,
                            the_letters=letters,
                            the_results=results,)
-from markupsafe import escape
-'''
-Current code gives raw data instead of structured data suitable for interpertations
-@app.route('/viewlog') #Created functionality to view log data in webapp only
-def view_the_log() -> str:
-    with open('vsearch.log') as log:
-        contents = log.read()
-    return escape(contents)  #escaping contents as request data is not rendered by browser
-;
-'''
-
-'''
-@app.route('/viewlog')
-def view_the_log() -> str:
-    with open('vsearch.log') as log:
-        contents = log.readlines() #Reading all data into a list. If contents were a list of lists instead of a list of strings, it would open up the 
-                                   #possibility of processing contents in order using a for loop
-    return escape(''.join(contents))
-'''
-
-'''
-The fact that the data is already in contents (thanks to our use of the 
-readlines method) shouldn’t blind us to the fact that we’ve already looped 
-through the data once at this point. Invoking readlines may only be a single 
-call for us, but the interpreter (while executing readlines) is looping through 
-the data in the file.
-'''
-'''
-At first glance, the output produced by this new version of view_the_log
-looks very similar to what you had before. But it isn’t: this new output is a list 
-of lists, not a list of strings.
-'''
-'''@app.route('/viewlog')
-def view_the_log() -> 'str':
-    contents = []
-    with open('vsearch.log') as log:
-        for line in log:
-            contents.append([])
-            for item in line.split('|'):
-                contents[-1].append(escape(item))
-    return str(contents)'''
-
+@app.route('/entry')
 
 @app.route('/viewlog')
 def view_the_log() -> 'html':
-    contents = []
-    with open('vsearch.log') as log:
-        for line in log:
-            contents.append([])
-            for item in line.split('|'):
-                contents[-1].append(escape(item))
-    titles = ('Form Data', 'Remote_addr', 'User_agent', 'Results')
+    with SQLDatabase(app.config['dbconfig']) as cursor:
+        _SQL = """Select phrase, letters, ip, browser_string, results
+        FROM log;"""
+        cursor.execute(_SQL)
+        contents = cursor.fetchall()
+    titles = ('Phrase', 'Letters', 'Remote_addr', 'User_agent', 'Results')
     return render_template('viewlog.html',
-                            the_title='View Log',
-                            the_row_titles=titles,
-                            the_data=contents,)
+                           the_title='View Log',
+                           the_row_titles=titles,
+                           the_data=contents, )
+
 @app.route('/entry')
 def entry_page() -> 'html':
     return render_template('entry.html',
