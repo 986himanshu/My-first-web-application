@@ -6,11 +6,34 @@ app = Flask(__name__)
 def hello() -> str:
     return 'Hello world from Flask!'
 
-def log_request(req: 'flask_request', res: str) -> None:
-    with open('vsearch.log', 'a') as log:
-        print(req.form, req.remote_addr, req.user_agent, res, file=log, sep='|')
+dbconfig = {'host': 'localhost',
+            'dbname': 'vsearchlogdb',
+            'user': 'postgres',
+            'password': '9811562757',
+            'port': '5432'
+                }
 
-@app.route('/search4' ,methods=['POST'])
+import psycopg2 as psql
+def log_request(req: 'flask_request', res: str) -> None:
+    """Log details of the web request and the results."""
+
+    conn = psql.connect(**dbconfig)
+    _SQL = """insert into log 
+    (phrase, letters, ip, browser_string, results)
+    values
+    (%s, %s, %s, %s, %s)"""
+    cursor = conn.cursor()
+    cursor.execute(_SQL, (req.form['phrase'],
+                          req.form['letters'],
+                          req.remote_addr,
+                          req.user_agent.browser,
+                          # This attribute is returning null entry while request.user_agent string does have browser name
+                          res,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
 @app.route('/search4' ,methods=['POST'])
 def do_search() -> str:
     phrase = request.form['phrase']
@@ -66,7 +89,7 @@ def view_the_log() -> 'str':
     return str(contents)'''
 
 
-@app.route('/viewlog')
+"""@app.route('/viewlog')
 def view_the_log() -> 'html':
     contents = []
     with open('vsearch.log') as log:
@@ -79,6 +102,27 @@ def view_the_log() -> 'html':
                             the_title='View Log',
                             the_row_titles=titles,
                             the_data=contents,)
+                            """
+
+"""Implementing view log in relation DBMS called postgreSQL"""
+@app.route('/viewlog')
+def view_the_log()-> 'html':
+    """Display the contents of the log file as a HTML table."""
+    conn = psql.connect(**dbconfig)
+    _SQL = """select phrase, letters, ip, browser_string, results from log"""
+    cursor = conn.cursor()
+    cursor.execute(_SQL)
+    contents = cursor.fetchall ()
+    conn.commit()
+    cursor.close()
+    conn.close()
+    titles = ('Phrase', 'Letters', 'Remote_addr', 'User_agent', 'Results')
+    return render_template('viewlog.html',
+                           the_title='View Log',
+                           the_row_titles=titles,
+                           the_data=contents,
+                           )
+
 @app.route('/entry')
 def entry_page() -> 'html':
     return render_template('entry.html',
