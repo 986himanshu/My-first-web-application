@@ -1,0 +1,5 @@
+# This file is to document changes that will occur in branch access_controlled_API
+While this branch is aimed at developing features for access control to API meant for internal users, just like life things changes to mandate working other than this specified scope
+
+* There is need to modularise SQL into other files for clean application
+* Further, there is concept of saving states related specific instance in session of flask which overcomes issues associated with scaled applications

@@ -1,28 +1,23 @@
-from flask import Flask, render_template,request
+from flask import Flask, render_template,request,session
 from vsearch import search4letters
+from DBcm import SQLDatabase
+from checker import check_logged_in
 
 app = Flask(__name__)
 @app.route('/')
 def hello() -> str:
     return 'Hello world from Flask!'
 
-import psycopg2 as psql
+@app.route('/login')
+def do_login() -> str:
+    session['logged_in'] = True
+    return 'You pare now logged in.'
 
+@app.route('/logout')
+def do_logout() -> str:
+    session.pop('logged_in')
+    return 'You are now logged out.'
 
-class SQLDatabase:  # This class will be context manager with start and exit defined. It will implement Setup, Do, Teardown pattern
-    def __init__(self, config: dict) -> None:  # For connection to PostgreSQL
-        self.configuration = config
-
-    def __enter__(self) -> 'cursor':  # Do part: Creating cursor object that will constitute DB API
-        self.conn = psql.connect(**self.configuration)
-        self.cursor = self.conn.cursor()
-        return self.cursor
-
-    def __exit__(self, exc_type, exc_value,
-                 exc_trace) -> None:  # Teardown part: It will close connection and release resources safely
-        self.conn.commit()
-        self.cursor.close()
-        self.conn.close()
 
 app.config['dbconfig'] = {'host' : 'localhost',
                 'dbname' : 'vsearchlogdb',
@@ -57,9 +52,9 @@ def do_search() -> str:
                            the_phrase=phrase,
                            the_letters=letters,
                            the_results=results,)
-@app.route('/entry')
 
 @app.route('/viewlog')
+@check_logged_in
 def view_the_log() -> 'html':
     with SQLDatabase(app.config['dbconfig']) as cursor:
         _SQL = """Select phrase, letters, ip, browser_string, results
@@ -76,6 +71,8 @@ def view_the_log() -> 'html':
 def entry_page() -> 'html':
     return render_template('entry.html',
                            the_title='Welcome to search4letters on the web!')
+
+app.secret_key = 'YouWillNeverGuessMySecretKey' #Seed Flask’s cookie generation technology with a “secret key,” which is used by Flask to encrypt your cookie, protecting it from any prying eyes
 app.run(debug = True, host= "0.0.0.0", port = 5000)
 # In the context of servers, 0.0.0.0 means "all IPv4 addresses on the local machine".
 # If a host has two IP addresses, 192.168.1.1 and 10.1.2.1, and a server running on the host listens on 0.0.0.0,
